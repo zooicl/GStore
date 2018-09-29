@@ -10,12 +10,12 @@ import numpy as np
 RESULT_PATH = 'results'
 
 
-def get_feature_importance(model):
+def get_feature_importance(model, importance_type='split'):
     fea_dict = {}
-    for k, v in zip(model.feature_name(), model.feature_importance()):
+    for k, v in zip(model.feature_name(), model.feature_importance(importance_type)):
         fea_dict[k] = v
 
-    fea_list = ['<feature_importance>']
+    fea_list = ['<feature_importance:>'.format(importance_type)]
     for i, fea in enumerate(sorted(fea_dict.items(), key=operator.itemgetter(1), reverse=True)):
         fea_list.append("{} {}".format(i, fea))
 
@@ -28,7 +28,10 @@ def report(df_train_idx, df_test_idx, y_pred_train, y_pred, msg, model=None):
     time_tag = datetime.datetime.now().strftime('%Y-%m-%dT%H%M%S')
 
     if model:
-        rmse_tag = 'T{0:.3f}_V{1:.3f}_K'.format(model.best_score['train']['rmse'], model.best_score['valid']['rmse'])
+        rmse_tag = 'T{0:.3f}_V{1:.3f}_R{2:.3f}_K'.format(
+            model.best_score['train']['rmse'],
+            model.best_score['valid']['rmse'],
+            model.best_score['valid']['rmse'] / model.best_score['train']['rmse'])
     else:
         rmse_tag = 'NONE'
 
@@ -37,14 +40,16 @@ def report(df_train_idx, df_test_idx, y_pred_train, y_pred, msg, model=None):
     os.makedirs(result_path, exist_ok=True)
 
     # Feature importance as an image
-    fig, ax = plt.subplots(figsize=(15, 15))
-    lgb.plot_importance(model, ax=ax, max_num_features=30)
-    fig.savefig(os.path.join(result_path, 'feature_importance.jpg'))
-    # fig.savefig('path/to/save/image/to.png')  # save the figure to file
-    plt.close(fig)
+    # fig, ax = plt.subplots(figsize=(15, 15))
+    # lgb.plot_importance(model, ax=ax, max_num_features=30)
+    # fig.savefig(os.path.join(result_path, 'feature_importance.jpg'))
+    # # fig.savefig('path/to/save/image/to.png')  # save the figure to file
+    # plt.close(fig)
 
-    fea_res = get_feature_importance(model)
+    fea_res = get_feature_importance(model, importance_type='split')
     msg.insert(0, fea_res)
+    fea_res = get_feature_importance(model, importance_type='gain')
+    msg.insert(1, fea_res)
 
     # Create train set raw result file
     df_res = df_train_idx.copy()
@@ -61,14 +66,12 @@ def report(df_train_idx, df_test_idx, y_pred_train, y_pred, msg, model=None):
     print('raw_test:', os.path.join(result_path, file_name))
 
     # Create submit file
-    df_test_idx['PredictedLogRevenue'] = 0
-    df_test_idx.loc[:, 'PredictedLogRevenue'] = y_pred
-    df_test_idx.loc[:, "PredictedLogRevenue"] = df_test_idx["PredictedLogRevenue"].apply(lambda x: 0.0 if x < 0 else x)
-    df_test_idx.loc[:, "PredictedLogRevenue"] = df_test_idx["PredictedLogRevenue"].fillna(0.0)
-    df_test_idx.loc[:, "PredictedLogRevenue"] = np.expm1(df_test_idx["PredictedLogRevenue"])
+    y_pred[y_pred < 0] = 0
+    df_test_idx["PredictedLogRevenue"] = np.expm1(y_pred)
 
-    df_submit = df_test_idx[['fullVisitorId', 'PredictedLogRevenue']].groupby('fullVisitorId').sum().reset_index()
-    df_submit.loc[:, "PredictedLogRevenue"] = np.log1p(df_submit["PredictedLogRevenue"])
+    df_submit = df_test_idx.groupby("fullVisitorId")["PredictedLogRevenue"].sum().reset_index()
+    df_submit.columns = ["fullVisitorId", "PredictedLogRevenue"]
+    df_submit["PredictedLogRevenue"] = np.log1p(df_submit["PredictedLogRevenue"])
 
     file_name = 'aiden_{}.csv.tar.gz'.format(time_tag)
     df_submit.to_csv(os.path.join(result_path, file_name), index=False, compression='gzip')
@@ -79,9 +82,17 @@ def report(df_train_idx, df_test_idx, y_pred_train, y_pred, msg, model=None):
         f.write('\n'.join(msg))
 
     # Copy notebook to results for history
-    cmd = """cp -f {notebook_name} {result_path}/{notebook_name}
-    """.format(**{'notebook_name': 'reg_lgbm.ipynb', 'result_path': result_path})
+    cmd = """cp -f {notebook_name} {result_path}
+    """.format(**{'notebook_name': '*.ipynb', 'result_path': result_path})
     print(cmd)
     subprocess.call(cmd, shell=True)
 
     return os.path.join(result_path, file_name)
+
+
+def submit_to_kaggle(file_path, msg='msg'):
+    cmd = """kaggle competitions submit -c ga-customer-revenue-prediction -f {file_path} -m "{msg}"
+    """.format(**{'file_path': file_path, 'msg': msg})
+
+    print(cmd)
+    subprocess.call(cmd, shell=True)
