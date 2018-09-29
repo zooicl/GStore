@@ -1,7 +1,8 @@
-import pandas as pd
-import numpy as np
 import time
 
+import numpy as np
+import pandas as pd
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 
@@ -218,5 +219,36 @@ def encode_mean_k_fold(df_train, df_test, categorical_feature, target_col):
 
     print(df_train.shape, df_test.shape)
     print(df_train.columns)
+
+    return df_train, df_test
+
+
+@timeit
+def encode_lda(df_train, df_test, categorical_feature, y_categorized, lda_name='lda'):
+    n_components = 10
+    print('lda_{}_0to{}'.format(lda_name, n_components - 1))
+    clf = LinearDiscriminantAnalysis(n_components=n_components)
+
+    df_merge = pd.concat([df_train[categorical_feature], df_test[categorical_feature]])
+
+    clf.fit(df_merge[categorical_feature], y_categorized)
+
+    df_train_lda = pd.DataFrame(clf.transform(df_train[categorical_feature]))
+    df_test_lda = pd.DataFrame(clf.transform(df_test[categorical_feature]))
+
+    col_map = {i: 'lda_{}_{}'.format(lda_name, i) for i in range(n_components)}
+    df_train_lda.rename(columns=col_map, inplace=True)
+    df_test_lda.rename(columns=col_map, inplace=True)
+
+    for c in col_map:
+        if c in df_train.columns:
+            df_train.drop(c, axis=1, inplace=True)
+        if c in df_test.columns:
+            df_test.drop(c, axis=1, inplace=True)
+
+    df_train = pd.concat([df_train, df_train_lda], axis=1)
+    df_test = pd.concat([df_test, df_test_lda], axis=1)
+
+    print(df_train.shape, df_test.shape)
 
     return df_train, df_test

@@ -15,7 +15,7 @@ def get_feature_importance(model, importance_type='split'):
     for k, v in zip(model.feature_name(), model.feature_importance(importance_type)):
         fea_dict[k] = v
 
-    fea_list = ['<feature_importance:>'.format(importance_type)]
+    fea_list = ['<feature_importance:{}>'.format(importance_type)]
     for i, fea in enumerate(sorted(fea_dict.items(), key=operator.itemgetter(1), reverse=True)):
         fea_list.append("{} {}".format(i, fea))
 
