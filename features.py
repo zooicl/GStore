@@ -2,6 +2,7 @@ import time
 
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import KFold
 from tqdm import tqdm
@@ -125,6 +126,29 @@ def fea_traffic_source(df):
     return df
 
 
+@timeit
+def fea_shift(df):  # aiden
+    df_g_sorted = df.sort_values(['visitStartTime'], ascending=True).groupby(['fullVisitorId'])
+
+    df['visitStartTime_b1'] = df_g_sorted['visitStartTime'].shift(1)
+    df.loc[df['visitStartTime_b1'].isnull(), 'visitStartTime_b1'] = df['visitStartTime']
+
+    df['visitStartTime_b2'] = df_g_sorted['visitStartTime'].shift(2)
+    df.loc[df['visitStartTime_b2'].isnull(), 'visitStartTime_b2'] = df['visitStartTime_b1']
+
+    df['visitStartTime_b1_diff'] = np.log1p(df['visitStartTime'] - df['visitStartTime_b1'])
+    df['visitStartTime_b2_diff'] = np.log1p(df['visitStartTime_b1'] - df['visitStartTime_b2'])
+
+    df.drop(['visitStartTime_b1'], axis=1, inplace=True)
+    df.drop(['visitStartTime_b2'], axis=1, inplace=True)
+
+    df['totals_hits_b1'] = df_g_sorted['totals_hits'].shift(1).fillna(0)
+
+    df['totals_pageviews_b1'] = df_g_sorted['totals_pageviews'].shift(1).fillna(0)
+
+    return df
+
+
 def get_features(df):
     org_cols = df.columns
     df = fea_date_time(df)
@@ -133,6 +157,7 @@ def get_features(df):
     df = fea_totals(df)
     df = fea_geo_network(df)
     df = fea_traffic_source(df)
+    df = fea_shift(df)
     fea_cols = list(set(df.columns) - set(org_cols))
     # print(new_cols)
 
@@ -224,9 +249,9 @@ def encode_mean_k_fold(df_train, df_test, categorical_feature, target_col):
 
 
 @timeit
-def encode_lda(df_train, df_test, categorical_feature, y_categorized, lda_name='lda'):
+def encode_lda(df_train, df_test, categorical_feature, y_categorized, fea_name='lda'):
     n_components = 10
-    print('lda_{}_0to{}'.format(lda_name, n_components - 1))
+    print('lda_{}_0to{}'.format(fea_name, n_components - 1))
     clf = LinearDiscriminantAnalysis(n_components=n_components)
 
     df_merge = pd.concat([df_train[categorical_feature], df_test[categorical_feature]])
@@ -236,7 +261,38 @@ def encode_lda(df_train, df_test, categorical_feature, y_categorized, lda_name='
     df_train_lda = pd.DataFrame(clf.transform(df_train[categorical_feature]))
     df_test_lda = pd.DataFrame(clf.transform(df_test[categorical_feature]))
 
-    col_map = {i: 'lda_{}_{}'.format(lda_name, i) for i in range(n_components)}
+    col_map = {i: 'lda_{}_{}'.format(fea_name, i) for i in range(n_components)}
+    df_train_lda.rename(columns=col_map, inplace=True)
+    df_test_lda.rename(columns=col_map, inplace=True)
+
+    for c in col_map:
+        if c in df_train.columns:
+            df_train.drop(c, axis=1, inplace=True)
+        if c in df_test.columns:
+            df_test.drop(c, axis=1, inplace=True)
+
+    df_train = pd.concat([df_train, df_train_lda], axis=1)
+    df_test = pd.concat([df_test, df_test_lda], axis=1)
+
+    print(df_train.shape, df_test.shape)
+
+    return df_train, df_test
+
+
+@timeit
+def encode_pca(df_train, df_test, categorical_feature, y_categorized, fea_name='lda'):
+    n_components = 10
+    print('pca_{}_0to{}'.format(fea_name, n_components - 1))
+    clf = PCA(n_components=n_components)
+
+    df_merge = pd.concat([df_train[categorical_feature], df_test[categorical_feature]])
+
+    clf.fit(df_merge[categorical_feature], y_categorized)
+
+    df_train_lda = pd.DataFrame(clf.transform(df_train[categorical_feature]))
+    df_test_lda = pd.DataFrame(clf.transform(df_test[categorical_feature]))
+
+    col_map = {i: 'pca_{}_{}'.format(fea_name, i) for i in range(n_components)}
     df_train_lda.rename(columns=col_map, inplace=True)
     df_test_lda.rename(columns=col_map, inplace=True)
 

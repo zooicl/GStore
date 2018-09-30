@@ -6,6 +6,7 @@ import subprocess
 import lightgbm as lgb
 import matplotlib.pyplot as plt
 import numpy as np
+from subprocess import PIPE, CalledProcessError, check_call, Popen
 
 RESULT_PATH = 'results'
 
@@ -79,20 +80,64 @@ def report(df_train_idx, df_test_idx, y_pred_train, y_pred, msg, model=None):
 
     # Write MSG
     with open(os.path.join(result_path, 'result.log'), 'w') as f:
-        f.write('\n'.join(msg))
+        f.write('\n\n'.join(msg))
 
     # Copy notebook to results for history
     cmd = """cp -f {notebook_name} {result_path}
-    """.format(**{'notebook_name': '*.ipynb', 'result_path': result_path})
+    """.format(**{'notebook_name': '*py*', 'result_path': result_path})
     print(cmd)
     subprocess.call(cmd, shell=True)
 
     return os.path.join(result_path, file_name)
 
 
-def submit_to_kaggle(file_path, msg='msg'):
-    cmd = """kaggle competitions submit -c ga-customer-revenue-prediction -f {file_path} -m "{msg}"
-    """.format(**{'file_path': file_path, 'msg': msg})
-
+def _exe_cli(cmd):
     print(cmd)
-    subprocess.call(cmd, shell=True)
+    cmd_list = cmd.strip().split(' ')
+
+    output = ''
+    err = ''
+    try:
+        check_call(cmd_list)
+        with Popen(cmd_list, stdout=PIPE) as df:
+            output, err = df.communicate()
+    except CalledProcessError as e:
+        print(e)
+
+    return output, err
+
+
+def _chagne_user(user):
+    kaggle_path = os.path.join(os.getenv('HOME'), ".kaggle")
+    print(kaggle_path)
+    cmd = "rm -f {kaggle_path}/kaggle.json".format(kaggle_path=kaggle_path)
+    print(_exe_cli(cmd))
+
+    cmd = "ln -s {kaggle_path}/kaggle.json_{user} {kaggle_path}/kaggle.json". \
+        format(user=user, kaggle_path=kaggle_path)
+    print(_exe_cli(cmd))
+
+
+def submit_to_kaggle(user, file_path, msg='msg'):
+    _chagne_user(user)
+
+    msg = msg.replace(' ', '_')
+    kaggle_cmd = os.path.join(os.getenv('HOME'), ".local", 'bin')
+    cmd = """{kaggle_cmd}/kaggle competitions submit -c ga-customer-revenue-prediction -f {file_path} -m "{msg}"
+    """.format(**{'file_path': file_path, 'msg': msg, 'kaggle_cmd': kaggle_cmd})
+    print(_exe_cli(cmd))
+
+
+def show_submissions(user=None):
+    if user:
+        _chagne_user(user)
+
+    kaggle_cmd = os.path.join(os.getenv('HOME'), '.local', 'bin')
+    cmd = "{kaggle_cmd}/kaggle competitions submissions ga-customer-revenue-prediction".format(kaggle_cmd=kaggle_cmd)
+    output, err = _exe_cli(cmd)
+    print(output[:1], err)
+
+
+if __name__ == '__main__':
+    # submit_to_kaggle('aidensong', '', '')
+    show_submissions(user='aidensong')
