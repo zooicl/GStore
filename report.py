@@ -33,6 +33,11 @@ def report(df_train_idx, df_test_idx, y_pred_train, y_pred, msg, model=None):
             model.best_score['train']['rmse'],
             model.best_score['valid']['rmse'],
             model.best_score['valid']['rmse'] / model.best_score['train']['rmse'])
+
+        fea_res = get_feature_importance(model, importance_type='split')
+        msg.insert(0, fea_res)
+        fea_res = get_feature_importance(model, importance_type='gain')
+        msg.insert(1, fea_res)
     else:
         rmse_tag = 'NONE'
 
@@ -47,10 +52,7 @@ def report(df_train_idx, df_test_idx, y_pred_train, y_pred, msg, model=None):
     # # fig.savefig('path/to/save/image/to.png')  # save the figure to file
     # plt.close(fig)
 
-    fea_res = get_feature_importance(model, importance_type='split')
-    msg.insert(0, fea_res)
-    fea_res = get_feature_importance(model, importance_type='gain')
-    msg.insert(1, fea_res)
+
 
     # Create train set raw result file
     df_res = df_train_idx.copy()
