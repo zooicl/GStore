@@ -29,7 +29,7 @@ def report(df_train_idx, df_test_idx, y_pred_train, y_pred, msg, model=None):
     time_tag = datetime.datetime.now().strftime('%Y-%m-%dT%H%M%S')
 
     if model:
-        rmse_tag = 'T{0:.3f}_V{1:.3f}_R{2:.3f}_K'.format(
+        rmse_tag = 'T{0:.4f}_V{1:.4f}_R{2:.4f}_K'.format(
             model.best_score['train']['rmse'],
             model.best_score['valid']['rmse'],
             model.best_score['valid']['rmse'] / model.best_score['train']['rmse'])

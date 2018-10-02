@@ -56,6 +56,10 @@ def fea_date_time(df):
     df['user_hour_max'] = df.groupby(['fullVisitorId'])['hour'].transform('max')  # aiden
     df['user_hour_min'] = df.groupby(['fullVisitorId'])['hour'].transform('min')  # aiden
 
+    # df['user_hour_var'] = df.groupby(['fullVisitorId'])['hour'].transform('var')  # aiden
+    # df['user_hour_max-min'] = df['user_hour_max'] - df['user_hour_min'] # aiden
+    # df['user_weekday_hour_mean'] = df.groupby(['fullVisitorId', 'weekday'])['hour'].transform('mean')  # aiden
+
     df['date'] = date_org
 
     return df
@@ -78,7 +82,6 @@ def fea_device(df):
         'mean')  # aiden
     df['source_country'] = df['trafficSource_source'] + '_' + df['geoNetwork_country']
 
-    df['browser_os'] = df['device_browser'] + '_' + df['device_operatingSystem']
     return df
 
 
@@ -119,7 +122,6 @@ def fea_geo_network(df):
 
 @timeit
 def fea_traffic_source(df):
-    df['source_country'] = df['trafficSource_source'] + '_' + df['geoNetwork_country']
     df['campaign_medium'] = df['trafficSource_campaign'] + '_' + df['trafficSource_medium']
     df['medium_hits_mean'] = df.groupby(['trafficSource_medium'])['totals_hits'].transform('mean')
     df['medium_hits_max'] = df.groupby(['trafficSource_medium'])['totals_hits'].transform('max')
@@ -452,11 +454,39 @@ def _source_mapping(x):
         return 'others'
 
 
+@timeit
 def fea_remap(df):
     df['device_browser'] = df['device_browser'].map(lambda x: _browser_mapping(str(x).lower())).astype('str')
     df['trafficSource_adContent'] = df['trafficSource_adContent'].map(
         lambda x: _adcontents_mapping(str(x).lower())).astype('str')
     df['trafficSource_source'] = df['trafficSource_source'].map(lambda x: _source_mapping(str(x).lower())).astype(
         'str')
+
+    return df
+
+
+@timeit
+def fea2_comb(df):
+    df['device_deviceCategory_channelGrouping'] = df['device_deviceCategory'] + "_" + df['channelGrouping']
+    df['channelGrouping_browser'] = df['device_browser'] + "_" + df['channelGrouping']
+    df['channelGrouping_OS'] = df['device_operatingSystem'] + "_" + df['channelGrouping']
+
+    first_cols = ['geoNetwork_city', 'geoNetwork_continent', 'geoNetwork_country', 'geoNetwork_metro',
+                  'geoNetwork_networkDomain', 'geoNetwork_region', 'geoNetwork_subContinent']
+
+    second_cols = ['device_browser', 'device_deviceCategory', 'device_operatingSystem', 'trafficSource_source']
+
+    for i in first_cols:
+        for j in second_cols:
+            df[i + "_" + j] = df[i] + "_" + df[j]
+
+    df['content_source'] = df['trafficSource_adContent'] + "_" + df['source_country']
+    df['medium_source'] = df['trafficSource_medium'] + "_" + df['source_country']
+    return df
+
+
+def fea2_groupby(df):
+    df['user_device_browser_hour_mean'] = df.groupby(['fullVisitorId', 'device_browser'])['hour'].transform(
+        'mean')  # aiden
 
     return df
